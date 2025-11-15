@@ -1,0 +1,110 @@
+import streamlit as st
+import requests
+from datetime import datetime
+
+st.title("Weather API Explorer 🌤️")
+
+API_KEY = "18b65d623e2c7457e59500b8dfb8087c"
+
+st.write("Enter a city to see the 5-day forecast.")
+
+city = st.text_input("City name", "Atlanta")
+units_label = st.selectbox("Units", ["Metric (°C)", "Imperial (°F)"])
+days = st.slider("How many days?", 1, 5, 3)
+
+variable = st.selectbox(
+    "What would you like to graph?",
+    ["Temperature", "Feels Like", "Humidity"]
+)
+
+if st.button("Get Forecast"):
+
+    units = "metric" if "Metric" in units_label else "imperial"
+    temp_unit = "°C" if units == "metric" else "°F"
+
+    url = "https://api.openweathermap.org/data/2.5/forecast"
+    params = {
+        "q": city,
+        "appid": API_KEY,
+        "units": units
+    }
+
+    response = requests.get(url, params=params)
+    data = response.json()
+
+    if data.get("cod") != "200":
+        st.error("City not found or API error.")
+        st.stop()
+
+    forecast_list = data["list"]
+
+
+    datetimes = []
+    temps = []
+    feels = []
+    hums = []
+    dates = []
+
+    for item in forecast_list:
+        dt = datetime.strptime(item["dt_txt"], "%Y-%m-%d %H:%M:%S")
+        datetimes.append(dt)
+        dates.append(dt.date())
+
+        temps.append(item["main"]["temp"])
+        feels.append(item["main"]["feels_like"])
+        hums.append(item["main"]["humidity"])
+
+    unique_dates = sorted(list(set(dates)))
+    selected = set(unique_dates[:days])
+
+    filtered_datetime = []
+    filtered_temps = []
+    filtered_feels = []
+    filtered_hums = []
+
+    for i in range(len(datetimes)):
+        if dates[i] in selected:
+            filtered_datetime.append(datetimes[i])
+            filtered_temps.append(temps[i])
+            filtered_feels.append(feels[i])
+            filtered_hums.append(hums[i])
+
+    st.subheader(f"Forecast for {city.title()}")
+
+    current_temp = filtered_temps[0]
+    current_feels = filtered_feels[0]
+    current_hum = filtered_hums[0]
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Temperature", f"{current_temp:.1f} {temp_unit}")
+    col2.metric("Feels Like", f"{current_feels:.1f} {temp_unit}")
+    col3.metric("Humidity", f"{current_hum}%")
+
+    if variable == "Temperature":
+        y = filtered_temps
+        ylabel = f"Temperature ({temp_unit})"
+    elif variable == "Feels Like":
+        y = filtered_feels
+        ylabel = f"Feels Like ({temp_unit})"
+    else:
+        y = filtered_hums
+        ylabel = "Humidity (%)"
+
+    st.subheader(f"{variable} Over Time")
+
+    chart_data = {"x": filtered_datetime, "y": y}
+    st.line_chart(chart_data, x="x", y="y")
+    st.subheader("Raw Forecast Data")
+
+    rows = []
+    for i in range(len(filtered_datetime)):
+        rows.append({
+            "Date/Time": filtered_datetime[i].strftime("%Y-%m-%d %H:%M"),
+            "Temperature": f"{filtered_temps[i]} {temp_unit}",
+            "Feels Like": f"{filtered_feels[i]} {temp_unit}",
+            "Humidity": f"{filtered_hums[i]}%"
+        })
+
+    st.table(rows)
+
+    st.success("Forecast loaded successfully!")
